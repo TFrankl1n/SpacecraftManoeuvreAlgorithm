@@ -21,66 +21,42 @@ def Default_Settings():                                                        #
         }                                                                       #add to this, '', 'frame:j200?', 'additional perturbations 
 
 class Orbit_Propagator:
-    def __init__(self, state0, tspan, dt, COEs=False, deg = False, centralbody=my_PD.earth, perturbations = Default_Settings()):
+    def __init__(self, state0, tspan, dt, COEs=False, degrees = False, centralbody=my_PD.earth, perturbations = Default_Settings()):
         
-        #initialise all relevant values, and replace any which we iwsh to change (for configuration
+        #initialise all relevant values, and replace any which we wish to change
         
-        #initialise COESs and the state inputs as pos and state, as we propagate in state vectors
-        #pass in ciel - for length of prop and calc
-        print("Running __init__ function...")
+        #initialise COESs and the state inputs as pos and state, as we will propagate in state vectors
+        print("Running __init__ ...")
         if COEs:                                                               # if passing coes as initial state 
-            self.r0, self.v0 = my_T.Convert_COEs_to_RV(state0, deg=deg, mu=centralbody['mu'])
+            self.r0, self.v0 = my_T.Convert_COEs_to_RV(state0, degrees=degrees, mu=centralbody['mu'])
         else:                                                                   #Pass straight in if not coes
             self.r0 = state0[:3]                                                #before 3
             self.v0 = state0[3:]                                                #after 3
             
+        #self.y0 = np.vstack((self.r0 + self.v0))
         self.y0 = self.r0.tolist() + self.v0.tolist()
         self.tspan = tspan
         self.dt = dt
         self.centralbody = centralbody
         
-        """        
-        #ALLOW USER TO ENTER ANY INFO THEY WISH TO SPECIFY - inplement at end
-        print("Enter True or False for the following:")
-        for item in Default_Perturbations:
-            input_check = False
-            while not input_check:
-                user_input = input(f"Please Determine the presence of {item}: ")
-                print (user_input)
-                print(user_input.lower())
-                if user_input.lower() == 'true':
-                    Default_Perturbations[item] = True
-                    input_check = True
-                elif user_input.lower() == 'false':
-                    Default_Perturbations[item] = False
-                    input_check = True
-                else:
-                    print("Invalid input. Please enter either True or False.")
-
-        print("Updated dictionary: \n",Default_Perturbations)
-        #we already have all the parameters we need to perform calcs + initiate t_vals and y_vals arrays, so no need for additional function
-        """
-        #STATE=Y
         #total no. of steps
         self.n_steps = int(np.ceil(self.tspan/self.dt))                        #cieling, rounds any float to the next whole number (2.1 --> 3)
 
-        #here we can initialise the zeros data arrays
-
         #initialise variables
         self.t_vals = np.zeros((self.n_steps,1))
-        self.y_vals = np.zeros((self.n_steps,6))                               #we know steps and values, preallocate values, so replace that spot of memory rather than making new array every time
+        self.y_vals = np.zeros((self.n_steps,6))                               #preallocate known step values, replacing memory rather than making new array every time
         self.t_vals[0] = 0
         self.y_vals[0,:] = self.y0
         self.step = 1                                                          #zero is first, initial condition, whereas this is the first step beyond initial
 
         #initialise solver
         self.solve = ode(self.differential_Eq)
-        self.solve.set_integrator('lsoda')                                     #If multiple orbits being calculated may reduce error with DOPRI5 / DOP853 in parrallel
+        self.solve.set_integrator('DOP853')                                     #If multiple orbits being calculated may reduce error with DOPRI5 / DOP853 in parrallel
         self.solve.set_initial_value(self.y0,0)                                #set i.c.'s                                                              
 
         #define perturbation dictionary
         self.perturbations = perturbations                                     #call in differential EQ
-        self.propagate_Orbit()                                                  
+        self.propagate_Orbit()                                                    
 
     def propagate_Orbit(self):                                                 #From 2 body ode - for initialising, solving at each instance, and propogating orbit 
         print("Propagating Orbit...")
@@ -104,26 +80,22 @@ class Orbit_Propagator:
 
         #Value Checks        
         #print("R Values: \t ", self.r_vals)
-        print("V Values: \t ", self.v_vals)
+        #print("V Values: \n ", self.v_vals)
         #print("t Values: \t ", self.t_vals)
         #print("y Values: \t ", self.y_vals)
 
-
-    def differential_Eq(self,t,y):                                             #needs time, initial state, extra parameter mu, 
-        #print("Constructing differential eq from state vectors [checking for perurbations]...")    
+    def differential_Eq(self,t,y):
         #unpack state
         rx,ry,rz,vx,vy,vz = y                                                  #y is the state, in 3 component directions (3D)
         r = np.array([rx,ry,rz])                                               #position array defined as vector for conveience
         v = np.array([vx,vy,vz])
         
-        norm_r = np.linalg.norm(r)                                    #norm of radius vector calling here
-        
+        norm_r = np.linalg.norm(r)                                             #norm of 3d radius vector
         a = -r*self.centralbody['mu'] / norm_r**3                              #two body acceleration
         
-        
         #this can be made into for loop over different perturbative method
-        if self.perturbations['J2']:                                            #call the perturbation term if set to true
-            z2 = r[2]**2                                                        #need state = y here**?
+        if self.perturbations['J2']:                                           #call the perturbation term if set to true
+            z2 = r[2]**2                                                        
             r2 = norm_r**2
             tx = r[0] / norm_r*(5*z2 / r2-1) 
             ty = r[1] / norm_r*(5*z2 / r2-1)     
@@ -133,6 +105,14 @@ class Orbit_Propagator:
             a+=a_j2                                                             #add elemnt by element 
 
         return [vx,vy,vz,a[0],a[1],a[2]]
+    
+#        if self.perturbations['OTHER!']:
+#            CALCS
+#            
+#           ACCELERATION
+#           APPEND
+#        
+#        return
 
 
     def calculate_COEs(self, degrees = True):                                   #after propogating:
@@ -145,14 +125,11 @@ class Orbit_Propagator:
         
 #    def stop condition functions( self ):
 
-#   check if spacecraft has matched trajectory of target orbit
+#   to check if spacecraft has matched trajectory of target orbit
 
-        
-        
-    
     def plot_COEs(self, hours=False, days=False, show_plot=False, save_plot=False, title='Orbital Elements Against Time for Orbit', figsize=(18,6)): #PRODUCES GRID PLOTS OF ORBIT VALS 
         #can change hrs to be days or yrs if we would want that???
-        print("I'm guessing converting rad. vectors to COEs is done, how about we now plot COE relationships...")
+        print("Plotting COE relationships...")
         
         #   orbital elements differfor each orbit type.
         fig, axs = plt.subplots(nrows=3,ncols=2,figsize=figsize)
@@ -160,7 +137,7 @@ class Orbit_Propagator:
         fig.suptitle(title,fontsize=10)
     
         #a, e, i, ta, aop, raan, [year, month, day, hour]]
-        #plot sma     all steps and third col
+        #plot sma
         axs[0,0].plot(self.t_vals, self.COEs[:,0])
         axs[0,0].set_title("\nSemi-Major Axis vs. Time")
         axs[0,0].grid(True)
@@ -181,14 +158,14 @@ class Orbit_Propagator:
         axs[2,0].set_ylabel('Inclination Angle (deg)')
         axs[2,0].set_xlabel('Time')
 
-        #plot true anomaly     all steps and third col
+        #plot true anomaly
         axs[0,1].plot(self.t_vals, self.COEs[:,3])
         axs[0,1].set_title("True Anomaly vs. Time")
         axs[0,1].grid(True)
         axs[0,1].set_ylabel('Angle(deg)')
         axs[0,1].set_xlabel('Time')
         
-        #plot arg of periapse (not perigee as could be anywhere)
+        #plot arg of periapse
         axs[1,1].plot(self.t_vals, self.COEs[:,4])
         axs[1,1].set_title("Arg of Periapse vs. Time")
         axs[1,1].grid(True)
@@ -202,54 +179,28 @@ class Orbit_Propagator:
         axs[2,1].set_ylabel(' RAAN (hrs, min, sec?)')
         axs[2,1].set_xlabel('Time')
         
-
-        
         if show_plot:
             plt.show()
             
         if save_plot:
             plt.savefig(title+'.png', dpi=300)
-            
-            
-
     
-    
-    def plot_vs(self, hours=False, days=False, show_plot=False, save_plot=False, title='Velocity Against Time for Transfer Orbit', figsize=(18,6)):  
-        print("Converting rad. compile vels. and plot.\n", len(self.v_vals), len(self.t_vals))
-        
-        print('Due to plot orbit velocity')
-        plt.plot(self.t_vals, self.v_vals)
-        plt.set_title("Velocity vs. Time")
-        plt.grid(True)
-        plt.set_ylabel('Velocity (km/s)')
-        #plt.set_xlabel(xlabel)
-        
-        
-        if show_plot:
-            plt.show()
-            
-        if save_plot:
-            plt.savefig(title+'.png', dpi=300)
 
-    def plot_3d(self, show_plot=False, save_plot = False, title='Single Trajectory Plot'): #THIS IS UNECESSARY???? is for this one clearly
+    def plot_3d(self, show_plot=False, save_plot = False, title='Single Trajectory Plot'): 
         print("Constructing diff-eq from state vectors, Plotting 3D figure of Trajectory") 
         fig = plt.figure(figsize=(16,8))
-        ax = fig.add_subplot(111,projection = '3d')                            #add to screen (plot space) [one plot one one fig, first col, row, value]
-
-        #plot trajectory
-        #tr, = ax.plot(self.r[:,0],self.r[:,1],self.r[:,2],'k', label='Trajectory')                         #w=white etc.
-        #ip, = ax.plot([self.r[0,0]], [self.r[0,1]], [self.r[0,2]],'wo',label='Initial Position')         #define initial orbit position - visual of whats going on, where begin + prientation wrt visual frame
-        ax.plot(self.r_vals[:,0],self.r_vals[:,1],self.r_vals[:,2],'k', label='Trajectory')                         #w=white etc.
-        ax.plot([self.r_vals[0,0]], [self.r_vals[0,1]], [self.r_vals[0,2]],'bo',label='Initial Position')         #define initial orbit position - visual of whats going on, where begin + prientation wrt visual frame
+        ax = fig.add_subplot(111,projection = '3d')                            
+        ax.plot(self.r_vals[:,0],self.r_vals[:,1],self.r_vals[:,2],'k', label='Trajectory')
+        ax.plot([self.r_vals[0,0]], [self.r_vals[0,1]], [self.r_vals[0,2]],'bo',label='Initial Position')     #define initial orbit position wrt visual frame
         
-        #plot central body - assuming orbiting perfect earth for now               - create sphere on 3d plot
-        lat, long = np.mgrid[0:2*np.pi:20j,0:np.pi:10j]                            #azimuth polar latitude/longitude for grid across surface of sphere, and find coords 
+        #plot central body                                                     #create sphere on 3d plot
+        lat, long = np.mgrid[0:2*np.pi:20j,0:np.pi:10j]                        #azimuth polar latitude/longitude for grid across surface of sphere, and find coords 
         coord_x = self.centralbody['radius']*np.cos(lat)*np.sin(long)
         coord_y = self.centralbody['radius']*np.sin(lat)*np.sin(long)
-        coord_z = self.centralbody['radius']*np.cos(long)                                    #calculating height pos  
+        coord_z = self.centralbody['radius']*np.cos(long)
         ax.scatter(coord_x, coord_y, coord_z, s=5, facecolor="grey")
         
-        max_val = np.max(np.abs(self.r_vals))                                                 #can make axes cubic (same mag? so axes aren't squished)
+        max_val = np.max(np.abs(self.r_vals))
 
         ax.set_xlim([-max_val,max_val])
         ax.set_ylim([-max_val,max_val])
@@ -261,16 +212,10 @@ class Orbit_Propagator:
 
 
         ax.set_title(title)
-        plt.legend()                                                            #if not labelled prev., use: plt.legend(['Trajectory','Initial Pos.'])
+        plt.legend()
 
         if show_plot:
             plt.subplot_tool()
             plt.show()
         if save_plot:
-            plt.savefig(title+".png",dpi=300)                                   #png is lossless
-            
-    
-
-                                        
-                                        
-    
+            plt.savefig(title+".png",dpi=300)
