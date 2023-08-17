@@ -26,9 +26,10 @@ class Satellite:
         self.add_perts = add_perts
         self.degrees = degrees
         self.segments = []                                                      # List to store final state values of previous propagation segment
+        self.DeltaV_Sat_Object = []
 
     def propagate(self, degrees, calculate_COEs, full_plot, grid_plot):
-        for orbit_elements in self.initial_elements:                            #Check
+        for orbit_elements in self.initial_elements:                            #Check inputs
             if initial_elements[1] <0.0 or initial_elements[1] >1.0:
                 raise ValueError("Eccentricity by definition must be between 0 and 1.")
             # Check if input values are in degrees correctly, defining bounds for true anomaly, argument of perigee, and right ascension of the ascending node
@@ -84,7 +85,6 @@ class Satellite:
                 self.time_moved +=1                                             # increment time_moved to only use segment values with later propagation
             
             self.segments.append(op)                                            # Append final state of propagation step to segemnts array
-
         except:
             raise ValueError("Check input orbital elements type. If using classical orbital elements (or TLE input), set 'withCOEs=True', if using state vectors, set 'withCOES=False")
         
@@ -94,7 +94,7 @@ class Satellite:
        
         # Propagate to the end of the initial segment
         initial_segment = self.segments[-1]
-        print("this is where perf_hohmann begins", self.segments[-1])
+        print("End of previous segment", self.segments[-1])
 
         #calculate initial COEs for transfer orbit
         Hohmann_transfer_initial_COEs = my_T.Convert_SV_to_COEs(initial_segment.r_vals[-1], initial_segment.v_vals[-1])
@@ -115,13 +115,12 @@ class Satellite:
                                                                                                 propagate=True, 
                                                                                                 add_perts=True
                                                                                             )  
-        
         print('DeltaV 0: \t %.3f (km/s)' % DeltaV_Vals[0])                    # Display Calculated DeltaV and time of flight values
         print('DeltaV 1: \t %.3f (km/s)' % DeltaV_Vals[1])
         print('Total DeltaV: ', DeltaV_Vals[1] + DeltaV_Vals[0])
         print('Eccentricity of Transfer: ', e_transfer)
         print('Transfer Time: \t',tof_transfer,' seconds, ',tof_transfer/3600, "hours")
-
+        
         self.segments.append(op0)                                               # Append initial segment to segments list (one complete orbit)
         self.segments.append(op_transfer)                                       # Append transfer segment to segments list
         self.segments.append(op1)                                               # Append (post second burn) segment to segments list (one complete orbit)
@@ -132,34 +131,34 @@ class Satellite:
         a_new = self.initial_elements[0] + smachange
         
         final_segment = self.segments[-1]                                       # Extract the final state of the last propagated segment
-        r_final = final_segment.r_vals[-1]
-        v_final = final_segment.v_vals[-1]
-        
+        last_segment_r_final = final_segment.r_vals[-1]
+        last_segment_v_final = final_segment.v_vals[-1]
+        #print("Transfer start coords:", last_segment_r_final)
         # Calculate initial COEs for transfer orbit
-        Hohmann_transfer_initial_COEs = my_T.Convert_SV_to_COEs(r_final, v_final)
+        Hohmann_transfer_initial_COEs = my_T.Convert_SV_to_COEs(last_segment_r_final, last_segment_v_final)
+        # print("[main] Hohmann Transfer start array:\n",Hohmann_transfer_initial_COEs)
+        # print(last_segment_r_final, last_segment_v_final)
         # Calculate final COEs for transfer orbit
         Hohmann_transfer_final_COEs = [a_new if i == 0 else x + 180.0 if i == 3 else x for i, x in enumerate(Hohmann_transfer_initial_COEs)]
-    
-    
+        # print("[main] Hohmann Transfer end array:\n",Hohmann_transfer_final_COEs)
+        # print(my_T.Convert_COEs_to_SV(Hohmann_transfer_final_COEs))
         # Propagate transfer with above conditions
         op0, op1, op_transfer, DeltaV_Vals, tof_transfer, e_transfer = my_T.Hohmann_Transfer(
-                                                                                                self.initial_elements[0], a_new,
+                                                                                                Hohmann_transfer_initial_COEs[0], a_new,
                                                                                                 COEs0=Hohmann_transfer_initial_COEs,
                                                                                                 COEs1=Hohmann_transfer_final_COEs,
                                                                                                 dt=100,
                                                                                                 propagate=True,
                                                                                                 add_perts=True
-                                                                                            )
-        print('13DeltaV 0: \t %.3f (km/s)' % DeltaV_Vals[0])
-        print('13DeltaV 1: \t %.3f (km/s)' % DeltaV_Vals[1])
-        print('13Total DeltaV: ', DeltaV_Vals[1] + DeltaV_Vals[0])
-        print('13Eccentricity of Transfer: ', e_transfer)
-        print('13Transfer Time: \t',tof_transfer,' seconds, ',tof_transfer/3600, "hours")
-
-        self.segments.append(op0)                                               # Append initial segment to segments list (one complete orbit)
+                                                                                            )                                      
+        # print('13DeltaV 0: \t %.3f (km/s)' % DeltaV_Vals[0])
+        # print('13DeltaV 1: \t %.3f (km/s)' % DeltaV_Vals[1])
+        # print('13Total DeltaV: ', DeltaV_Vals[1] + DeltaV_Vals[0])
+        # print('13Eccentricity of Transfer: ', e_transfer)
+        # print('13Transfer Time: \t',tof_transfer,' seconds, ',tof_transfer/3600, "hours")
+        self.segments.append(op0)                                              # Append initial segment to segments list (one complete orbit)
         self.segments.append(op_transfer)                                       # Append transfer segment to segments list
         self.segments.append(op1)                                               # Append (post second burn) segment to segments list (one complete orbit)
-       
         self.time_moved +=1
 
         pass
@@ -194,7 +193,7 @@ class Satellite:
                                     calculate_COEs=False,
                                     full_plot=False,
                                     grid_plot=False
-                                )
+                                 )
         
         # Append the propagated segment to the segments list
         self.segments.append(op)
@@ -224,9 +223,9 @@ filename_SL = 'Files/TLE_3_Starlink-30095.txt'
 file_path_SL_ = os.path.join(script_dir, filename_SL)
 file_path_SL = file_path_SL_.replace('\\','/')
 
-print(file_path_ISS)                                                            #Check any file path to ensure correctly denoted in software for calling
+# print(file_path_ISS)                                                            #Check any file path to ensure correctly denoted in software for calling
 
-# script_dir = os.path.dirname(os.path.abspath(__file__))                       #Check directory of python script 
+# script_dir = os.path.dirname(os.path.abspath(__file__))                         #Check directory of python script 
 # print("Current script location:", script_dir)
 
 ###############################################################################
@@ -279,40 +278,51 @@ print(file_path_ISS)                                                            
 ############################################################################### Example sequence:
     
 # Initialize an orbit
-initial_elements = [6630, 0.0, 15.0, 15.0, 30.0, 10.0]
+initial_elements = [10563, 0.2, 25.0, 50.0, 30.0, 10.0]
 dt = 60.0
 
-tspan = 84500.0
-sat_1 = Satellite(initial_elements, tspan, dt, withCOEs=True, add_perts=True, degrees=True)
+tspan = 2000.0
+sat_1 = Satellite(initial_elements, 
+                  tspan, 
+                  dt, 
+                  withCOEs=True,
+                  add_perts=True, 
+                  degrees=True
+                  )
 
 # Perform propagation
-tspan = 84500.0
 sat_1.propagate(
-    degrees=True, 
-    calculate_COEs=False, 
-    full_plot=False, 
-    grid_plot=False, 
-    )
+                degrees=True, 
+                calculate_COEs=False, 
+                full_plot=False, 
+                grid_plot=False, 
+                )
+#Immediate Hohmann Transfer
+smachange = 8754
+sat_1.perform_hohmann_transfer(smachange) 
 
+initial_elements = [10563, 0.2, 25.0, 50.0, 30.0, 10.0]
+dt = 60.0
 
-
-
-# # Perform inclination change
-delta_i = 10
-sat_1.perform_inclination_change(delta_i)
-
-# Perform Hohmann transfer
-smachange = 6500
-sat_1.perform_hohmann_transfer_optimal(smachange) #ORIGINAL HOHMANN TRANSFER NEEDS TO BE DEFINED TO TAKE END OF TRANSFER VALUES
-
-#Perform additional propagation if needed
-tspan = 44588
-sat_1.propagate(
-    degrees=True, 
-    calculate_COEs=False, 
-    full_plot=False, 
-    grid_plot=False,
-    )
+tspan = 9900.0
+sat_2 = Satellite(initial_elements, 
+                  tspan, 
+                  dt, 
+                  withCOEs=True,
+                  add_perts=True, 
+                  degrees=True
+                  )
+# Perform propagation
+sat_2.propagate(
+                degrees=True, 
+                calculate_COEs=False, 
+                full_plot=False, 
+                grid_plot=False, 
+                )
+#Immediate Hohmann Transfer
+smachange = 8754
+sat_2.perform_hohmann_transfer(smachange) 
 
 # Plot all segments
 sat_1.plot_orbits()
+sat_2.plot_orbits()
