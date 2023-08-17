@@ -381,6 +381,137 @@ def Propagate_Orbit(COEs, tspan, dt, centralbody=my_PD.earth, withCOEs=None, add
 
 
 def Hohmann_Transfer(r0=0, r1=0, centralbody=my_PD.earth, COEs0=[], COEs1=[], altitude=True, 
+                          dt=100, names=['Initial', 'Final', 'Transfer'], propagate=True,
+                          add_perts=True, perturbations=Default_Settings()):
+    print("Hohmann_Transfer Function Running...")
+    # print("[my_T] COEs0:\n",COEs0, Convert_COEs_to_SV(COEs0)[3:])
+    # print("[my_T] COEs1:\n",COEs1, Convert_COEs_to_SV(COEs1))
+    
+    # Check if COEs are passed in correctly
+    if COEs0:
+        a0 = COEs0[0]
+        e0 = COEs0[1]
+        # a1 = COEs1[0]
+        # e1 = COEs1[1]
+        COEs1[3] = COEs0[3]+180  # *****NOT NECESSARY?
+    # Propagate orbit for DeltaV
+    if propagate:
+        if add_perts:
+            perturbations['J2'] = True   
+        else:
+            perturbations['J2'] = False
+        if not COEs0: 
+            print("Classical Orbital Elements have not been provided.")    
+        
+        T_0 = 2 * np.pi * (a0**3 / centralbody['mu'])**0.5
+        op0 = my_OP(COEs0, T_0, dt, withCOEs=True, degrees=False, perturbations=perturbations)
+        op0_COEs = Convert_SV_to_COEs(op0.r_vals[0], op0.v_vals[0])
+        
+        COEs1 = op0_COEs
+        COEs1[0] = op0_COEs[0] + r1
+        COEs1[3] = COEs0[3] + 180
+        T_1 = 2 * np.pi * (COEs1[0]**3 / centralbody['mu'])**0.5
+        op1 = my_OP(COEs1, T_1, dt, withCOEs=True, degrees=False, perturbations=perturbations)
+        
+        
+        print(op0_COEs)
+        #apogee and perigee calcs
+        r_p0 = norm(op0.r_vals[-1])
+        print("[my_T] transfer rp ",r_p0)
+
+        #op1 is the perfect transfer, we want to find the 
+        r_a1 = norm(op1.r_vals[0])
+        print("[my_T] transfer ra ",r_a1)
+        
+        a_transfer = (r_p0 + r_a1) / 2.0                                        # Calculate the transfer radius and velocities 
+        v_circ_init = nm.sqrt(centralbody['mu'] / r_p0)                         # Calculate the transfer initial velocities 
+        # print("vcircinit", v_circ_init)
+        V_circ_final = nm.sqrt(centralbody['mu'] / r_a1)                        # Calculate the transfer final velocities 
+        # print("V_circ_final", V_circ_final)
+
+        v0_transfer = nm.sqrt(centralbody['mu'] * (2 / r_p0 - 1 / a_transfer))
+        v1_transfer = nm.sqrt(centralbody['mu'] * (2 / r_a1 - 1 / a_transfer))
+        print("v0_transfer",v0_transfer)
+        print("v1_transfer", v1_transfer)
+        
+        # Given velocity vector
+        velocity_direction0 = op0.v_vals[0] #np.array([-3.07285007, -4.54833964, -2.04915268])
+        direction_norm0 = norm(op0.v_vals[0])                                    # Calculate the norm of the direction vector        
+        normalized_direction0 = velocity_direction0 / direction_norm0              # Normalize the direction vector
+        scaled_velocity_components0 = normalized_direction0 * v0_transfer         # Calculate the scaled velocity components
+        
+        velocity_direction1 = op1.v_vals[0] #np.array([-3.07285007, -4.54833964, -2.04915268])
+        direction_norm1 = norm(op1.v_vals[0])                                    # Calculate the norm of the direction vector        
+        normalized_direction1 = velocity_direction1 / direction_norm1              # Normalize the direction vector
+        scaled_velocity_components1 = normalized_direction1 * v1_transfer         # Calculate the scaled velocity components
+
+        # Print the results
+        print("Original Velocity Vector:", velocity_direction0)
+        print("Normalized Direction Vector:", normalized_direction0)
+        print("Scaled Velocity Components:", scaled_velocity_components0, norm(scaled_velocity_components0))
+        print("Original Velocity Vector:", velocity_direction1)
+        print("Normalized Direction Vector:", normalized_direction1)
+        print("Scaled Velocity Components:", scaled_velocity_components1, norm(scaled_velocity_components1))
+        
+        SV_transfer_initial = np.concatenate((op0.r_vals[0], scaled_velocity_components0))
+        print(SV_transfer_initial)
+        tof_transfer = 1 * np.pi * nm.sqrt((a_transfer**3) / centralbody['mu'])     # Calculate time of flight and delta-v values
+        DeltaV_Vals = [0.5*abs(scaled_velocity_components0 - v_circ_init), 0.5*abs(V_circ_final - scaled_velocity_components1)]
+        e_transfer = 1 - r_p0 / a_transfer 
+        
+        if altitude: # Use central body radius if not
+            r_p0 += centralbody['radius']
+            r_a1 += centralbody['radius']
+        
+        print("[my_T] Where Transfer should start COEs:\n", Convert_SV_to_COEs(op0.r_vals[-1], scaled_velocity_components0))
+        #print("[my_T] Where Transfer should start:\n", op0.r_vals[-1], norm(op0.v_vals[-1]))
+
+        # Propagate initial state of the transfer orbit to the desired starting point
+        #op0 = my_OP(COEs0, T_0, dt, withCOEs=True, degrees=False, perturbations=perturbations)
+# COEs_transfer_initial = Convert_SV_to_COEs(op0.r_vals[-1], op0.v_vals[-1]){}
+# COEs_transfer_initial[1] = e_transfer
+        
+# print("[my_T] Actual Transfer start COEs:\n", COEs_transfer_initial)
+# print("[my_T] Actual Transfer start:\n", Convert_COEs_to_SV(COEs_transfer_initial))
+#print("[my_T] COEs_transfer_initial\n", COEs_transfer_initial)
+        
+        # Calculate transfer orbit and final COEs
+        #COEs_transfer_COEs = [r_transfer, e_transfer, COEs0[2], 0.0, COEs0[4], COEs0[5]] 
+        op_transfer = my_OP(SV_transfer_initial, tof_transfer, dt, withCOEs=False)
+        #op_transfer = my_OP(COEs_transfer_initial, tof_transfer, dt, withCOEs=False)
+        
+        print(op_transfer.r_vals[0])
+        
+        print("[my_T] Where Transfer should end COEs:\n", Convert_SV_to_COEs(op1.r_vals[-1], scaled_velocity_components1))
+        print("[my_T] Where Transfer should end:\n", op1.r_vals[-1],scaled_velocity_components1)
+         
+        
+        COEs_transfer_final = Convert_SV_to_COEs(op_transfer.r_vals[-1], op_transfer.v_vals[-1])
+        # print("[my_T] Actual Transfer end COEs:\n", COEs_transfer_final)
+        print("[my_T] Actual Transfer end:\n", Convert_COEs_to_SV(COEs_transfer_final))
+        #Convert_SV_to_COEs(r, v)
+        
+        #print("THING 1\n", COEs0)
+        #print("THING 2\n", COEs1)
+        #print("T_0\t", T_0)
+        #print("T_1\t", T_1)
+        
+        # # Create op0_transfer instance and set its initial state to the final state of op0
+        # op0_transfer = my_OP(COEs0, T_0, dt, withCOEs=False, degrees=False, perturbations=perturbations)
+        # op0_transfer.set_initial_state(op0_transfer.end_of_segment)  # Set initial state
+        
+        print(op_transfer.r_vals[0])
+        print(op_transfer.r_vals[-1])
+        
+        print("Delta vals: \t", DeltaV_Vals) #np.concatenate((norm.DeltaV_Vals[0], norm.DeltaV_Vals[1])))
+        return op0, op1, op_transfer, DeltaV_Vals, tof_transfer, e_transfer
+    else:
+        print("We didn't propagate anything")
+        return DeltaV_Vals, tof_transfer, e_transfer
+    
+    
+
+def Hohmann_Transfer_ideal(r0=0, r1=0, centralbody=my_PD.earth, COEs0=[], COEs1=[], altitude=True, 
                           dt=100, names=['Initial', 'Final', 'transfer'], propagate=True,
                           add_perts=True, perturbations=Default_Settings()):
     print("13Hohmann_Transfer Function Running...")
@@ -413,7 +544,6 @@ def Hohmann_Transfer(r0=0, r1=0, centralbody=my_PD.earth, COEs0=[], COEs1=[], al
     DeltaV_Vals = [0.5*abs(v0_transfer - v_circ_init), 0.5*abs(V_circ_final - v1_transfer)]
     e_transfer = 1 - rp0 / r_transfer 
     
-    
     # Propagate orbit for DeltaV
     if propagate:
         if add_perts:
@@ -421,14 +551,26 @@ def Hohmann_Transfer(r0=0, r1=0, centralbody=my_PD.earth, COEs0=[], COEs1=[], al
         else:
             perturbations['J2'] = False
         if not COEs0: 
-            print("13Classical Orbital Elements have not been provided.")    
-        
+            print("13Classical Orbital Elements have not been provided.")            
+        """
+        # Calculate the new orbital period for op0 considering the time to reach the transfer orbit
+        T_0_with_transfer = 2 * np.pi * ((r0 + centralbody['radius'])**3 / centralbody['mu'])**0.5
+        T_0_eff = T_0_with_transfer - tof_transfer
+        # Propagate op0 to the point where the transfer orbit begins
+        op0_transfer = my_OP(COEs0, T_0_eff, dt, withCOEs=True, degrees=False, perturbations=perturbations)
+        """
         COEs_transfer_initial = [r_transfer, e_transfer, COEs0[2], 0.0, COEs0[4], COEs0[5]] 
+        
         op_transfer = my_OP(COEs_transfer_initial, tof_transfer, dt, withCOEs=True)
-        #print("\nTRANFER ORBIT PROP OUTPUT\n", op_transfer.r_vals)
+        #print("\nTRANFER ORBIT PROP positions\n", op_transfer.r_vals)
+        
         COEs_transfer_final = Convert_SV_to_COEs(op_transfer.r_vals[-1], op_transfer.v_vals[-1])
         #print("Start of transfer: ", COEs_transfer_initial)
         #print("\nthe end of the prop contains the values:",COEs_transfer_final, "\nMatch with raan of COEs1....\n\n")
+        
+        # Calculate the new COEs for op0 that lead to optimum transfer position [same as COEs_transfer_initial]
+        print("Initial")
+        
         COEs1[3] = COEs_transfer_final[3]
         #Convert_SV_to_COEs(r, v)
         T_0 = 2 * np.pi * (a0**3 / centralbody['mu'])**0.5
@@ -441,7 +583,12 @@ def Hohmann_Transfer(r0=0, r1=0, centralbody=my_PD.earth, COEs0=[], COEs1=[], al
         
         op0 = my_OP(COEs0, T_0, dt, withCOEs=True, degrees=False, perturbations=perturbations)
         op1 = my_OP(COEs1, T_1, dt, withCOEs=True, degrees=False, perturbations=perturbations)
- 
+        print(op0.r_vals[0])
+        print(op0.r_vals[-1])
+        print(op_transfer.r_vals[0])
+        print(op_transfer.r_vals[-1])
+        print(op1.r_vals[0])
+        print(op1.r_vals[-1])
         
         print("Delta vals: \t", DeltaV_Vals)
         return op0, op1, op_transfer, DeltaV_Vals, tof_transfer, e_transfer
