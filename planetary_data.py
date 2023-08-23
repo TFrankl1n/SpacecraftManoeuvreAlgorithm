@@ -8,8 +8,11 @@ earth = {
     'mu':5.974e24*G,
     'radius':6378.0, #km
     'J2':1.08263e-3,
-    'deorbit_altitude':400 #km
-    #sma # km
+    'deorbit_altitude':400, #km
+    'Cd': 2.2,                                                                 # Drag coefficient (adjust as needed for craft's aero properties)
+    'drag_area': 20.0,                                                         #Effective cross-sectional drag area (adjust based on the spacecraft's characteristics) m^2
+    'sc_mass': 500.0,                                                          #Spacecraft mass in kg (data from default Astrogator prop values)         
+    #sma # km 
     #SOI??
     #
 }
